@@ -1,31 +1,11 @@
 package client
 
-import (
-	"errors"
-	"os"
-)
+import "github.com/alex117de/google-places-api-go/logger"
 
-const endpointDefault = "https://places.googleapis.com/v1/places:searchNearby"
+const EndpointDefault = "https://places.googleapis.com/v1/places:searchNearby"
 
 type Config struct {
 	Endpoint string
 	ApiToken string
-}
-
-func NewConfig() (*Config, error) {
-	apiToken := os.Getenv("PLACES_CLIENT_API_TOKEN")
-	endpoint := os.Getenv("PLACES_CLIENT_ENDPOINT")
-
-	if endpoint == "" {
-		endpoint = endpointDefault
-	}
-
-	if apiToken == "" {
-		return nil, errors.New("environment variable PLACES_CLIENT_API_TOKEN is not set")
-	}
-
-	return &Config{
-		Endpoint: endpoint,
-		ApiToken: apiToken,
-	}, nil
+	LogLevel logger.LogLevel
 }

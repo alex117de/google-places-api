@@ -3,15 +3,18 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"github.com/alex117de/google-places-api-go/logger"
+	"github.com/alex117de/google-places-api-go/request"
+	"github.com/alex117de/google-places-api-go/response"
 	"io"
 	"log"
 	"net/http"
-	"places-client/request"
-	"places-client/response"
 )
 
 type Client struct {
 	config Config
+	logger logger.Logger
 }
 
 const (
@@ -25,8 +28,21 @@ func (c Client) GetNearByPlaces(req request.Request) (*response.Response, error)
 
 	httpRes, err := c.doReq(req)
 
-	if err != nil {
+	if httpRes != nil {
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				c.logger.Warning("closing body failed: %v", err)
+			}
+		}(httpRes.Body)
+	}
+
+	if err != nil || httpRes == nil {
 		return res, err
+	}
+
+	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
+		return res, c.handleErrorResponse(*httpRes)
 	}
 
 	err = c.readJson(*httpRes, res)
@@ -34,6 +50,8 @@ func (c Client) GetNearByPlaces(req request.Request) (*response.Response, error)
 	if err != nil {
 		return nil, err
 	}
+
+	c.logger.Debug("Got Response from GetNearByPlaces", res)
 
 	return res, nil
 }
@@ -51,13 +69,13 @@ func (c Client) readJson(httpResponse http.Response, response *response.Response
 func (c Client) doReq(request request.Request) (*http.Response, error) {
 	jsonData, err := json.Marshal(request.Body)
 	if err != nil {
-		log.Fatalf("Error encoding JSON: %v", err)
+		c.logger.Error("Error encoding JSON: %v", err)
 		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", c.config.Endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
+		c.logger.Error("Error creating request: %v", err)
 		return nil, err
 	}
 
@@ -66,23 +84,32 @@ func (c Client) doReq(request request.Request) (*http.Response, error) {
 	req.Header.Set(HeaderFieldMask, request.FieldMask)
 
 	client := &http.Client{}
+
+	c.logger.Debug("Sending request: %v", req)
 	res, err := client.Do(req)
 
 	if err != nil {
-		log.Fatalf("Error making request: %v", err)
+		c.logger.Error("Error making request: %v", err)
 		return nil, err
 	}
-	defer res.Body.Close()
 
 	return res, nil
 }
 
-func New() (*Client, error) {
-	conf, err := NewConfig()
+func (c Client) handleErrorResponse(httpRes http.Response) error {
+	body, err := io.ReadAll(httpRes.Body)
 
 	if err != nil {
-		return nil, err
+		c.logger.Error("Error reading error response body: %v", err)
 	}
 
-	return &Client{config: *conf}, nil
+	c.logger.Warning("API responded with Status-Code: %v \n Response: %v", httpRes.StatusCode, string(body))
+
+	return errors.New("API responded error")
+}
+
+func New(config Config, logService *log.Logger) Client {
+	clientLogger := logger.New(logService, config.LogLevel)
+
+	return Client{config: config, logger: clientLogger}
 }
