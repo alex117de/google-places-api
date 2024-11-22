@@ -1,6 +1,6 @@
 package client
 
-import "github.com/alex117de/google-places-api-go/logger"
+import "github.com/alex117de/google-places-api/logger"
 
 const EndpointDefault = "https://places.googleapis.com/v1/places:searchNearby"
 
